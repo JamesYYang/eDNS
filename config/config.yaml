@@ -1,0 +1,107 @@
+ExtBTF: 
+EnableK8S: false
+IsInK8S: false
+K8SNodeCIDR: 172.16.178.0/24
+IsMockService: false
+NotifyServiceChange: false
+EventOutput: Console
+KafkaAddr: 172.16.171.78:9092,172.16.171.79:9092,172.16.171.80:9092
+KafkaTopic: mbpf_event
+KafkaBatchSize: 10
+ExcludeComm:
+  - kubelet
+  - zabbix_agentd
+WokerConfig:
+  EBPFSysExecve: 
+    PerfMapSize: 3
+    Asset: ebpf/bin/sys_execve.o
+    Enable: false
+    EbpfType: Trace
+    Probes:
+      - UID: MBPFSysExecveProbe
+        Section: tracepoint/syscalls/sys_enter_execve
+        EbpfFuncName: tracepoint_sys_enter_execve
+        AttachToFuncName: sys_enter_execve
+    MapName: sys_enter_execve_events
+    MsgHandler: mh_sys_enter_execve
+  EBPFSysOpenat: 
+    PerfMapSize: 1
+    Asset: ebpf/bin/sys_openat.o
+    Enable: false
+    EbpfType: Trace
+    Probes:
+      - UID: MBPFSysOpenatProbe
+        Section: tracepoint/syscalls/sys_enter_openat
+        EbpfFuncName: tracepoint_openat
+        AttachToFuncName: sys_enter_openat
+    MapName: sys_enter_openat_events
+    MsgHandler: mh_sys_enter_openat
+  EBPFTCPConnectProbe: 
+    PerfMapSize: 1
+    Asset: ebpf/bin/tcp_connect.o
+    Enable: true
+    EbpfType: Trace
+    Probes:
+      - UID: MBPFTCPConnectProbe
+        Section: tracepoint/sock/inet_sock_set_state
+        EbpfFuncName: tracepoint_inet_sock_set_state
+        AttachToFuncName: inet_sock_set_state
+    MapName: tcp_connect_events
+    MsgHandler: mh_tcp_connect
+  EBPFTCPRetransProbe: 
+    PerfMapSize: 1
+    Asset: ebpf/bin/tcp_retrans.o
+    Enable: true
+    EbpfType: Kprobe
+    Probes:
+      - UID: MBPFTCPRetransProbe
+        Section: kprobe/tcp_retransmit_skb
+        EbpfFuncName: kp_tcp_retransmit_skb
+        AttachToFuncName: tcp_retransmit_skb
+    MapName: tcp_retrans_events
+    MsgHandler: mh_tcp_retrans
+  EBPFTCPRSTProbe: 
+    PerfMapSize: 1
+    Asset: ebpf/bin/tcp_reset.o
+    Enable: true
+    EbpfType: Kprobe
+    Probes:
+      - UID: MBPFTCPRSTProbe
+        Section: kprobe/tcp_v4_send_reset
+        EbpfFuncName: kp_tcp_v4_send_reset
+        AttachToFuncName: tcp_v4_send_reset
+    MapName: tcp_reset_events
+    MsgHandler: mh_tcp_reset
+  EBPTCDNSProbe: 
+    PerfMapSize: 1
+    Asset: ebpf/bin/tc_dns.o
+    Enable: false
+    EbpfType: TC
+    Probes:
+      - UID: MBPFXDPProbe
+        Section: classifier/egress
+        EbpfFuncName: tc_dns_func
+        Ifname:
+        NetworkDirection: Egress
+    MapToKernel: dns_a_records
+    MapName: dns_capture_events
+    MsgHandler: mh_tc_dns
+  EBPFTCProbe: 
+    PerfMapSize: 1
+    Asset: ebpf/bin/tc_capture.o
+    Enable: false
+    EbpfType: TC
+    Probes:
+      - UID: MBPFTCProbeIngress
+        Section: classifier/ingress
+        EbpfFuncName: ingress_cls_func
+        Ifname:
+        NetworkDirection: Ingress
+      - UID: MBPFTCProbeEgress
+        Section: classifier/egress
+        EbpfFuncName: egress_cls_func
+        Ifname:
+        NetworkDirection: Egress
+    MapName: tc_capture_events
+    MsgHandler: mh_tc_capture
+    
