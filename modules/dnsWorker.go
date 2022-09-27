@@ -4,24 +4,29 @@ import (
 	"bytes"
 	"eDNS/assets"
 	"eDNS/config"
-	"eDNS/k8s"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
 	"math"
+	"net"
+	"os"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
+	"github.com/cilium/ebpf/perf"
 	manager "github.com/ehids/ebpfmanager"
 	"golang.org/x/sys/unix"
 )
 
 type DNSWorker struct {
 	WConfig           *config.Configuration
-	K8SWatcher        *k8s.Watcher
+	dp                *DomainProvider
 	bpfManager        *manager.Manager
 	bpfManagerOptions manager.Options
 	eventMap          *ebpf.Map
+	dnsMap            *ebpf.Map
 }
 
 func NewWorker() (*DNSWorker, error) {
@@ -32,6 +37,7 @@ func NewWorker() (*DNSWorker, error) {
 	}
 	wd := &DNSWorker{}
 	wd.WConfig = wConfig
+	wd.dp = NewDomainProvider(wConfig)
 	return wd, nil
 }
 
@@ -53,20 +59,22 @@ func (w *DNSWorker) Run() error {
 		return errors.New("couldn't start bootstrap manager")
 	}
 
-	// err = w.setupKernelMap()
-	// if err != nil {
-	// 	return err
-	// }
+	err = w.setupKernelMap()
+	if err != nil {
+		return err
+	}
 
-	// err = w.setupEventMap()
-	// if err != nil {
-	// 	return err
-	// }
+	err = w.setupEventMap()
+	if err != nil {
+		return err
+	}
 
-	// err = w.readEvents()
-	// if err != nil {
-	// 	return err
-	// }
+	err = w.readEvents()
+	if err != nil {
+		return err
+	}
+
+	w.dp.LoadDomain()
 
 	return nil
 }
@@ -119,5 +127,140 @@ func (w *DNSWorker) getBTFSpec() *btf.Spec {
 			log.Printf("load external BTF from, %s", w.WConfig.ExtBTF)
 			return spec
 		}
+	}
+}
+
+func (w *DNSWorker) setupKernelMap() error {
+	em, found, err := w.bpfManager.GetMap("dns_a_records")
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("cant found map: dns_a_records")
+	}
+	w.dnsMap = em
+
+	go func(sc chan NetAddress) {
+		for {
+			select {
+			case na := <-sc:
+				w.UpdateDNSMap(na)
+			}
+		}
+	}(w.dp.ServiceChange)
+
+	return nil
+}
+
+func (w *DNSWorker) UpdateDNSMap(addr NetAddress) {
+	qk := getKey(addr.Host)
+	if addr.IsDelete {
+		log.Printf("remove DNS[%s]", addr.Host)
+		err := w.dnsMap.Delete(qk)
+		if err != nil {
+			log.Printf("Remove DNS[%s] map failed, error: %v", addr.Host, err)
+		}
+	} else {
+		ip := net.ParseIP(addr.IP)
+		if ip == nil {
+			log.Printf("Parse DNS[%s] IP[%s] failed", addr.Host, addr.IP)
+			return
+		}
+		record := DNSRecord{
+			IP:  binary.LittleEndian.Uint32(ip.To4()),
+			TTL: 30,
+		}
+		log.Printf("Add DNS[%s] IP[%s]", addr.Host, addr.IP)
+		err := w.dnsMap.Put(unsafe.Pointer(&qk), unsafe.Pointer(&record))
+		if err != nil {
+			log.Printf("Add DNS[%s] map failed, error: %v", addr.Host, err)
+		}
+	}
+}
+
+func getKey(host string) DNSQuery {
+	queryKey := DNSQuery{
+		RecordType: 1,
+		Class:      1,
+	}
+	nameSlice := make([]byte, 256)
+	copy(nameSlice, []byte(host))
+	dnsName := replace_dots_with_length_octets(nameSlice)
+	copy(queryKey.Name[:], dnsName)
+	return queryKey
+}
+
+func (w *DNSWorker) setupEventMap() error {
+
+	em, found, err := w.bpfManager.GetMap("dns_capture_events")
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("cant found event map: dns_capture_events")
+	}
+	w.eventMap = em
+	return nil
+}
+
+func (w *DNSWorker) readEvents() error {
+	var errChan = make(chan error, 8)
+	event := w.eventMap
+	log.Println("begin read events")
+	go w.perfEventReader(errChan, event)
+
+	for {
+		select {
+		case err := <-errChan:
+			return err
+		}
+	}
+}
+
+func (w *DNSWorker) perfEventReader(errChan chan error, em *ebpf.Map) {
+	log.Println("begin to read from perfbuf")
+	rd, err := perf.NewReader(em, os.Getpagesize())
+	if err != nil {
+		errChan <- fmt.Errorf("creating %s reader dns: %s", em.String(), err)
+		return
+	}
+	defer rd.Close()
+	for {
+		record, err := rd.Read()
+		if err != nil {
+			if errors.Is(err, perf.ErrClosed) {
+				return
+			}
+			errChan <- fmt.Errorf("reading from perf event reader: %s", err)
+			return
+		}
+
+		if record.LostSamples != 0 {
+			log.Printf("perf event ring buffer full, dropped %d samples", record.LostSamples)
+			continue
+		}
+
+		w.Decode(record.RawSample)
+	}
+}
+
+func (w *DNSWorker) Decode(b []byte) {
+	var event Net_DNS_Event
+	if err := binary.Read(bytes.NewBuffer(b), binary.LittleEndian, &event); err != nil {
+		return
+	}
+
+	strMsg := fmt.Sprintf("[DNS] [%s] (Type: %d, Match: %d, Spend: %d)",
+		unix.ByteSliceToString(replace_length_octets_with_dots(event.Name[:])),
+		event.RecordType, event.IsMatch, event.TS)
+
+	log.Println(strMsg)
+}
+
+func (w *DNSWorker) Stop() {
+	log.Println("stopping DNS worker")
+	err := w.bpfManager.Stop(manager.CleanAll)
+	if err != nil {
+		log.Printf("stop DNS worker failed, error: %v", err)
 	}
 }

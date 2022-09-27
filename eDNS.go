@@ -1,16 +1,18 @@
 package main
 
 import (
-	"eDNS/k8s"
 	"eDNS/kernel"
 	"eDNS/modules"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/cilium/ebpf/rlimit"
 )
+
+var once sync.Once
 
 func main() {
 
@@ -43,31 +45,14 @@ func main() {
 	dw, err := modules.NewWorker()
 	if err != nil {
 		log.Printf("Start eDNS worker error: %v", err)
-	} else {
-		k8sReady := make(chan bool)
-		dw.K8SWatcher = k8s.NewWatcher(dw.WConfig, func() {
-			once.Do(func() { k8sReady <- true })
-		})
-		go dw.K8SWatcher.Run()
-		<-k8sReady
-
-		dw.Run()
-
+		return
 	}
 
-	// wd, err := modules.NewWorkerDispatch()
-	// if err != nil {
-	// 	log.Printf("Start dispatch error: %v", err)
-	// } else {
-	// 	wd.HostUname = uname
-	// 	wd.InitWorkers()
-	// 	wd.Run()
-
-	// }
+	dw.Run()
 
 	<-stopper
 
-	// wd.Stop()
+	dw.Stop()
 
 	log.Println("Received signal, exiting program..")
 }

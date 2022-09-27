@@ -1,0 +1,5 @@
+Domains:
+  - Name: apis.newegg.org
+    IP: 172.16.171.52
+  - Name: test.newegg.org
+    IP: 172.16.171.50
