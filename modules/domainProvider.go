@@ -53,6 +53,8 @@ func (dp *DomainProvider) LoadDomainConfig() {
 		return
 	}
 
+	log.Printf("get %d domain config", len(dc.DomainConfigs))
+
 	for _, d := range dc.DomainConfigs {
 		na := NetAddress{
 			Host:     d.Name,

@@ -69,12 +69,12 @@ func (w *DNSWorker) Run() error {
 		return err
 	}
 
+	w.dp.LoadDomain()
+
 	err = w.readEvents()
 	if err != nil {
 		return err
 	}
-
-	w.dp.LoadDomain()
 
 	return nil
 }

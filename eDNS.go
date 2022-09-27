@@ -48,7 +48,7 @@ func main() {
 		return
 	}
 
-	dw.Run()
+	go dw.Run()
 
 	<-stopper
 
