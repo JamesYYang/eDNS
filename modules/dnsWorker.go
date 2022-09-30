@@ -84,6 +84,7 @@ func (w *DNSWorker) setupManager() {
 	if ifname == "" {
 		_, ifname = GetLocalIP()
 	}
+	log.Printf("attach tc hook on dev: %s", ifname)
 	w.bpfManager = &manager.Manager{
 		Probes: []*manager.Probe{
 			{

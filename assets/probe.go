@@ -100,7 +100,7 @@ func bindataEbpfBinTcdnsO() (*asset, error) {
 		size: 41896,
 		md5checksum: "",
 		mode: os.FileMode(511),
-		modTime: time.Unix(1664276053, 0),
+		modTime: time.Unix(1664548922, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
