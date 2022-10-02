@@ -174,9 +174,8 @@ static int match_a_records(struct dns_query *q, struct a_record *a)
   }
   return -1;
 }
-// egress_cls_func is called for packets that are going out of the network
-SEC("classifier/egress")
-int tc_dns_func(struct __sk_buff *ctx)
+
+static inline int tc_dns_func(struct __sk_buff *ctx, int isIngress)
 {
   uint64_t start = bpf_ktime_get_ns();
 
@@ -317,7 +316,14 @@ int tc_dns_func(struct __sk_buff *ctx)
           bpf_perf_event_output(ctx, &dns_capture_events, BPF_F_CURRENT_CPU, dns_e, sizeof(*dns_e));
 
           // Redirecting the modified skb on the same interface to be transmitted again
-          return bpf_redirect(ctx->ifindex, BPF_F_INGRESS);
+          if (isIngress == 1)
+          {
+            return bpf_redirect(ctx->ifindex, 0);
+          }
+          else
+          {
+            return bpf_redirect(ctx->ifindex, BPF_F_INGRESS);
+          }
         }
       }
     }
@@ -325,5 +331,18 @@ int tc_dns_func(struct __sk_buff *ctx)
 
   return TC_ACT_OK;
 };
+
+// egress_cls_func is called for packets that are going out of the network
+SEC("classifier/ingress")
+int tc_dns_ingress(struct __sk_buff *ctx)
+{
+  return tc_dns_func(ctx, 1);
+}
+
+SEC("classifier/egress")
+int tc_dns_egress(struct __sk_buff *ctx)
+{
+  return tc_dns_func(ctx, 0);
+}
 
 char _license[] SEC("license") = "GPL";

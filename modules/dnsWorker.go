@@ -84,7 +84,16 @@ func (w *DNSWorker) setupManager() {
 	if ifname == "" {
 		_, ifname = GetLocalIP()
 	}
-	log.Printf("attach tc hook on dev: %s", ifname)
+	ndStr := w.WConfig.NetworkDirection
+	nd := manager.Ingress
+	section := "classifier/ingress"
+	funcName := "tc_dns_ingress"
+	if ndStr == "Egress" {
+		nd = manager.Egress
+		section = "classifier/egress"
+		funcName = "tc_dns_egress"
+	}
+	log.Printf("attach tc hook on dev: %s, direction: %s", ifname, ndStr)
 	w.bpfManager = &manager.Manager{
 		Probes: []*manager.Probe{
 			{
@@ -93,10 +102,10 @@ func (w *DNSWorker) setupManager() {
 				// customize deleteed TC filter
 				// tc filter del dev eth0 ingress(egress)
 				UID:              "tc_dns",
-				Section:          "classifier/egress",
-				EbpfFuncName:     "tc_dns_func",
+				Section:          section,
+				EbpfFuncName:     funcName,
 				Ifname:           ifname,
-				NetworkDirection: manager.Egress,
+				NetworkDirection: nd,
 			},
 		},
 	}

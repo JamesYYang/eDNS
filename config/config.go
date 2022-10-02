@@ -8,10 +8,11 @@ import (
 
 type (
 	Configuration struct {
-		ExtBTF    string `yaml:"ExtBTF"`
-		EnableK8S bool   `yaml:"EnableK8S"`
-		IsInK8S   bool   `yaml:"IsInK8S"`
-		Ifname    string `yaml:"Ifname"`
+		ExtBTF           string `yaml:"ExtBTF"`
+		EnableK8S        bool   `yaml:"EnableK8S"`
+		IsInK8S          bool   `yaml:"IsInK8S"`
+		Ifname           string `yaml:"Ifname"`
+		NetworkDirection string `yaml:"NetworkDirection"`
 	}
 )
 

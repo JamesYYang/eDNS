@@ -1,4 +1,5 @@
 ExtBTF: 
 EnableK8S: false
 IsInK8S: false
-Ifname: 
+Ifname:
+NetworkDirection: Egress
