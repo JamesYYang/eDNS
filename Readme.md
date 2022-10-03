@@ -2,13 +2,21 @@
 
 ## About
 eDNS is an experimental DNS component written in BPF for high throughput, low latency DNS responses.  
-It uses TC egress to process packets early in the Linux networking path.  
-A user space application is provided to add DNS records to a BPF map which is read from K8S informer.
+It uses TC ingress / egress to process packets early in the Linux networking path.  
+A user space application is provided to add DNS records to a BPF map which is read from K8S informer or load from static file.
 
 ## Use Case and Concept
 In Kubernetes, pods communicate by service name. So a DNS query is needed before every request. The CoreDNS deployed by default in the Kubernetes cluster may experience problems such as high DNS resolution delay, resolution timeout, and resolution failure in scenarios with high DNS QPS.  
 eDNS can be used to solve this problem. It watch any servcie change in kubernetes then add service name and IP to ebpf map. And it also can load domain config from static file.  
 eDNS use ebpf tc ingress / egress hook, and response the DNS request which the query domain is kubernetes serivce name.
+
+## Features & limitations
+- Currently supports A records
+- Only supports plain DNS over UDP (port 53)
+- Basic EDNS implementation
+- Only responds to single queries for now
+- No recursive lookups
+- Can't use in cilium network.
 
 ## How to Choose tc Hook
 In Kubernetes, it is better use tc ingress hook to veth interface in host.  
